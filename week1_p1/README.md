@@ -18,6 +18,7 @@ Rules:
 - no comments
 - boolean expressions cannot appear on the right hand side of an assignment statement
 - boolean expressions cannot be returned, or passed as a parameter to the print function
+- all blocks start with declarations, you cannot have it later. But there can be NO declarations too right? 
 
 Our basic building blocks (tokens) will be:
 - code_statements is what everything is reduced to. So that's what `%start` relies on.

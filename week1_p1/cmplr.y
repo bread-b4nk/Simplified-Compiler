@@ -42,11 +42,11 @@ code_statements : code_statements code_statement
 		| code_statements while_block 
 		| code_statements func_block 
 		| func_block
-		| func_declaration		
-		| kfunc_declaration	
+		| if_else_block
+		| while_block
 		| code_statement 		
 
-code_statement : assignment | var_declaration | return | kfunc_call
+code_statement : assignment | var_declaration | return | kfunc_call | func_declaration | kfunc_declaration
 
 if_else_block : if_statement '{' code_statements '}' else_block
 	| if_statement '{' code_statements '}' 
@@ -81,12 +81,13 @@ var_declaration : types VAR ';'
 func_declaration : types VAR '(' ')' ';' %prec ONE
 		| types VAR '(' types VAR ')' ';' %prec ONE
 
-kfunc_declaration : types KFUNC '(' ')' ';'
-		| types KFUNC '(' types ')' ';'
+kfunc_declaration : types KFUNC '(' ')' ';' %prec ONE
+		| types KFUNC '(' types ')' ';' %prec ONE
 
 kfunc_call : KFUNC '(' ')' ';' %prec TWO | KFUNC '(' VAR ')' ';' %prec TWO
 
 assignment : VAR '=' arith_expression ';' | VAR '=' NUM ';' | VAR '=' VAR ';'
+		| VAR '=' kfunc_call 
 
 return : RETURN ';' | RETURN '(' arith_expression ')' ';' | RETURN arith_expression ';' | RETURN '(' NUM ')' ';' | RETURN NUM ';'
 
