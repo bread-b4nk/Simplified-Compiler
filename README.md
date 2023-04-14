@@ -1,44 +1,22 @@
-Share with "kvasanta" on git
+# Simplified Compiler!
 
-# please run `make` and then `make test`
+# Chavin (Kris) Udomwongsa 
 
-I've reached the requirements of the current checkpoint, however I've got an error I haven't debugged, I can't seem to parse the second line of the mini-c code! (the read() function declaration.) 
+We have a `make clean` and a `make test` to run the compiler on the test files
+
 
 Below are notes that I've made, I haven't put in much effort into making it very readable.
 
-Rules:
+Rules (of mini-c):
 - no comments
 - single function, can be named anything other than main, read, or print
 - only integers, no other data type
 - one variable declared per line
-- variable declarations are always at the start of a code block
+- variable declarations are always at the start of a code block, however they don't need to exist
 - all arithmetic operations have 2 operands, and we only do +,-,*,/
 - only logical operations are <,>,==,>=,<=
-- only while ???
-- no comments
 - boolean expressions cannot appear on the right hand side of an assignment statement
 - boolean expressions cannot be returned, or passed as a parameter to the print function
-- all blocks start with declarations, you cannot have it later. But there can be NO declarations too right? 
-- q: yeah we should discover things on our own, if we were given all the instructions and specifications then it would be like CS 1. BUT we should more explicitly be told the specific rules of mini-c and that we NEED to make rules for MINI-C SPECIFICALLY!!!! If that was clearer then we'd be able to explore **on our own** AND **in the right direction**
-
-
-Our basic building blocks (tokens) will be:
-- code_statements is what everything is reduced to. So that's what `%start` relies on.
-
-- keywords
-	- known functions
-	- boolean values
-	- data types
-	- loop terms
-	- if, else
-- variable names
-- operators
-	- mathematical operators
-	- logical operations
-- numbers (we only deal with int)
-
-What's Not Done: currently, I'm handling any references to `print` and `read` as known functions, or `KFUNC`'s  as 
-KFUNC_CALL : `KFUNC '(' ')' ';' | KFUNC '(' VAR ')' ';'
 
 Yacc Rules:
 

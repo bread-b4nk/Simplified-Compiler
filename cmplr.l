@@ -12,11 +12,11 @@
 
 
 %%
-int 		{printf("%s",yytext);return DATATYPE;}	// KEYWORDS: data types
-void		{printf("%s",yytext);return DATATYPE;}
+int 		{printf("%s",yytext);return INT;}	// KEYWORDS: data types
+void		{printf("%s",yytext);return VOID;}
 extern    	{printf("%s",yytext);return EXTERN;} 
-print		{printf("%s",yytext);return KFUNC;}	// known functions
-read		{printf("%s",yytext);return KFUNC;}
+print		{printf("%s",yytext);return PRINT;}	// known functions
+read		{printf("%s",yytext);return READ;}
 return		{printf("%s",yytext);return RETURN;}
 if 		{printf("%s",yytext);return IF;}	// conditions
 else		{printf("%s",yytext);return ELSE;}
@@ -42,7 +42,7 @@ while 		{printf("%s",yytext);return WHILE;}		// loops
 "=="		{printf("%s",yytext);
 		yylval.sname = strdup(yytext);return EQ_OPTR;}
 "\n"		{printf("%s",yytext);yylineno++;}
-.|[ \t\n]       {printf("%s",yytext);}	
+.|[ \t]       {printf("%s",yytext);}	
 %%
 
 
