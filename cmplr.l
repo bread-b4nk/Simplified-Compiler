@@ -4,14 +4,12 @@
 	extern int yylex();
 	extern int yylex_destroy();
 	extern int yywrap();
-	int yyerror();
+	extern int yyerror();
 	extern FILE *yyin;
 
 	int yylineno; // should be handled in yybval later
 %}
 
-alph a-zA-Z
-num 0-9
 
 %%
 int 		{printf("%s",yytext);return DATATYPE;}	// KEYWORDS: data types
@@ -31,12 +29,18 @@ while 		{printf("%s",yytext);return WHILE;}		// loops
 "{"		{printf("%s",yytext);return yytext[0];}
 "}"		{printf("%s",yytext);return yytext[0];}
 "="		{printf("%s",yytext);return yytext[0];}
-[\+\-\*\/]	{printf("%s",yytext);return ARITH;}
-"<"		{printf("%s",yytext);return LOGICAL_OPTR;}
-">"		{printf("%s",yytext);return LOGICAL_OPTR;}
-"<="		{printf("%s",yytext);return LOGICAL_OPTR;}
-">="		{printf("%s",yytext);return LOGICAL_OPTR;}
-"=="		{printf("%s",yytext);return LOGICAL_OPTR;}
+"+"		{printf("%s",yytext);return yytext[0];}
+"-"		{printf("%s",yytext);return yytext[0];}
+"*"		{printf("%s",yytext);return yytext[0];}
+"/"		{printf("%s",yytext);return yytext[0];}
+"<"		{printf("%s",yytext);return yytext[0];}
+">"		{printf("%s",yytext);return yytext[0];}
+"<="		{printf("%s",yytext);
+		yylval.sname = strdup(yytext);return LEQ_OPTR;}
+">="		{printf("%s",yytext);
+		yylval.sname = strdup(yytext);return GEQ_OPTR;}
+"=="		{printf("%s",yytext);
+		yylval.sname = strdup(yytext);return EQ_OPTR;}
 "\n"		{printf("%s",yytext);yylineno++;}
 .|[ \t\n]       {printf("%s",yytext);}	
 %%
@@ -45,3 +49,4 @@ while 		{printf("%s",yytext);return WHILE;}		// loops
 int yywrap() {
 	return 1;
 }
+

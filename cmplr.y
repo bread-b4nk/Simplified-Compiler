@@ -10,12 +10,19 @@ int yyerror();
 
 %}
 
+%union{
+	int ival;
+	char* sname;
+	
+}
 
-%token VAR DATATYPE
+
+%token <sname> DATATYPE
 %token EXTERN RETURN KFUNC
 %token WHILE IF ELSE 
-%token ARITH LOGICAL_OPTR 		// operators
-%token NUM
+%token <ival> ARITH // operators
+%token <ival> NUM VAR //? IS VAR AN INT OR A STRING
+%token <sname> LEQ_OPTR GEQ_OPTR EQ_OPTR
 
 %start code_statements
 
@@ -70,11 +77,21 @@ if_statement : IF '(' bool_expression ')'
 while_statement :  WHILE '(' bool_expression  ')'
 
 
-arith_expression : VAR ARITH VAR | VAR ARITH NUM
-		| NUM ARITH NUM | NUM ARITH VAR
+arith_expression : add_expr | sub_expr | mul_expr | div_expr
 
-bool_expression : VAR LOGICAL_OPTR VAR | VAR LOGICAL_OPTR NUM 
-		| NUM LOGICAL_OPTR NUM | NUM LOGICAL_OPTR VAR
+add_expr : VAR '+' VAR | VAR '+' NUM | NUM '+' NUM | NUM '+' VAR
+sub_expr : VAR '-' VAR | VAR '-' NUM | NUM '-' NUM | NUM '-' VAR
+mul_expr : VAR '*' VAR | VAR '*' NUM | NUM '*' NUM | NUM '*' VAR
+div_expr : VAR '/' VAR | VAR '/' NUM | NUM '/' NUM | NUM '/' VAR
+
+bool_expression : lt_expr | gt_expr | leq_expr | geq_expr | eq_expr 
+
+lt_expr : VAR '<' VAR | VAR '<' NUM | NUM '<' NUM | NUM '<' VAR
+gt_expr : VAR '>' VAR | VAR '>' NUM | NUM '>' NUM | NUM '>' VAR
+leq_expr : VAR LEQ_OPTR VAR | VAR LEQ_OPTR NUM | NUM LEQ_OPTR NUM | NUM LEQ_OPTR VAR 
+geq_expr : VAR GEQ_OPTR VAR | VAR GEQ_OPTR NUM | NUM GEQ_OPTR NUM | NUM GEQ_OPTR VAR
+eq_expr : VAR EQ_OPTR VAR | VAR EQ_OPTR NUM | NUM EQ_OPTR NUM | NUM EQ_OPTR VAR
+
 
 var_declaration : types VAR ';' 
 
