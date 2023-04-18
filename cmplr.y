@@ -36,13 +36,11 @@ int yyerror();
 
 %%
 
-program : externs func_block
+program : extern_print extern_read func_block
+	| extern_read extern_print func_block
 
-externs : externs extern
-	| extern
-
-extern : EXTERN VOID PRINT '(' INT ')' ';' 
-	| EXTERN INT READ '(' ')' ';' 
+extern_print : EXTERN VOID PRINT '(' INT ')' ';' 
+extern_read :  EXTERN INT READ '(' ')' ';' 
 
 func_block : INT VAR '(' INT VAR ')' '{' code_block '}'
 		| INT VAR '(' ')' '{' code_block '}'
