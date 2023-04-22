@@ -1,6 +1,8 @@
 %{
 	#include <stdio.h>
+	#include "./ast/ast.h"
 	#include "y.tab.h"
+	#include <string.h>
 	extern int yylex();
 	extern int yylex_destroy();
 	extern int yywrap();
@@ -8,6 +10,8 @@
 	extern FILE *yyin;
 
 	int yylineno; // should be handled in yybval later
+
+
 %}
 
 
@@ -21,8 +25,10 @@ return		{printf("%s",yytext);return RETURN;}
 if 		{printf("%s",yytext);return IF;}	// conditions
 else		{printf("%s",yytext);return ELSE;}
 while 		{printf("%s",yytext);return WHILE;}		// loops
-\-?[0-9]+  	{printf("%s",yytext);return NUM;}	// integers
-[a-zA-Z_][a-zA-Z0-9_]*       {printf("%s",yytext);return VAR;}// var name
+\-?[0-9]+  	{printf("%s",yytext);yylval.ival = atoi(yytext); 
+				return NUM;}	// integers
+[a-zA-Z_][a-zA-Z0-9_]*       {printf("%s",yytext);yylval.sname =  strdup(yytext);
+				return VAR;}// var name
 ";"		{printf("%s",yytext);return yytext[0];}
 "("		{printf("%s",yytext);return yytext[0];}
 ")"		{printf("%s",yytext);return yytext[0];}
@@ -35,12 +41,10 @@ while 		{printf("%s",yytext);return WHILE;}		// loops
 "/"		{printf("%s",yytext);return yytext[0];}
 "<"		{printf("%s",yytext);return yytext[0];}
 ">"		{printf("%s",yytext);return yytext[0];}
-"<="		{printf("%s",yytext);
-		yylval.sname = strdup(yytext);return LEQ_OPTR;}
-">="		{printf("%s",yytext);
-		yylval.sname = strdup(yytext);return GEQ_OPTR;}
-"=="		{printf("%s",yytext);
-		yylval.sname = strdup(yytext);return EQ_OPTR;}
+"<="		{printf("%s",yytext);return LEQ_OPTR;}
+">="		{printf("%s",yytext);return GEQ_OPTR;}
+"=="		{printf("%s",yytext);return EQ_OPTR;}
+"!="		{printf("%s",yytext);return NOT_OPTR;}
 "\n"		{printf("%s",yytext);yylineno++;}
 .|[ \t]       {printf("%s",yytext);}	
 %%

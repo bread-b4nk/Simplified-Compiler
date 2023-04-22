@@ -1,5 +1,6 @@
 %{
 #include <stdio.h>
+#include "./ast/ast.h"
 extern int yylex();
 extern int yylex_destroy();
 extern int yywrap();
@@ -8,21 +9,33 @@ extern FILE *yyin;
 int yyerror();
 
 
+astNode* rootNode;
+
 %}
 
 %union{
 	int ival;
 	char* sname;
-	
+	astNode* nptr;
+	vector<astNode*> *svec_ptr;	
 }
 
 
 %token <sname> VAR
 %token EXTERN RETURN PRINT READ INT VOID
-%token WHILE IF ELSE 
-%token <ival> ARITH // operators
-%token <ival> NUM 
-%token <sname> LEQ_OPTR GEQ_OPTR EQ_OPTR
+%token WHILE IF ELSE ARITH 
+%token <ival> NUM // operators
+%token LEQ_OPTR GEQ_OPTR EQ_OPTR NOT_OPTR
+		
+// NOTE: try changing astNode to nptr - https://stackoverflow.com/questions/19891748/yystype-has-no-member-named-for-union-type
+%type <nptr> program extern_print extern_read func_block code_block
+%type <nptr> code_statement if_else_block else_block
+%type <nptr> while_block if_statement while_statement arith_expression bool_expression
+%type <nptr> add_expr sub_expr mul_expr div_expr 
+%type <nptr> lt_expr gt_expr geq_expr leq_expr eq_expr neq_expr term var_decl
+%type <nptr> kfunc_call assignment return
+
+%type <svec_ptr> var_decls code_statements
 
 %start program
 //%start code_statements
@@ -36,71 +49,101 @@ int yyerror();
 
 %%
 
-program : extern_print extern_read func_block
-	| extern_read extern_print func_block
+program : extern_print extern_read func_block {$$ = createProg($1,$2,$3);}
+	| extern_read extern_print func_block {$$ = createProg($2,$1,$3);}
 
-extern_print : EXTERN VOID PRINT '(' INT ')' ';' 
-extern_read :  EXTERN INT READ '(' ')' ';' 
+extern_print : EXTERN VOID PRINT '(' INT ')' ';' {$$ = createExtern("print");} 
+extern_read :  EXTERN INT READ '(' ')' ';' 	 {$$ = createExtern("read");}
 
-func_block : INT VAR '(' INT VAR ')' '{' code_block '}'
-		| INT VAR '(' ')' '{' code_block '}'
-		| VOID VAR '(' INT VAR ')' '{' code_block '}'
-		| VOID VAR '(' ')' '{' code_block '}' 
+func_block : INT VAR '(' INT VAR ')' '{' code_block '}' {$$ = createFunc($2,createVar($5),$8);}
+		| INT VAR '(' ')' '{' code_block '}'    {$$ = createFunc($2,NULL,$6);}
+		| VOID VAR '(' INT VAR ')' '{' code_block '}' {$$ = createFunc($2,createVar($5), $8);}
+		| VOID VAR '(' ')' '{' code_block '}' {$$ = createFunc($2,NULL,$6);}
 
-code_block : var_decls code_statements
-		| code_statements 
+code_block : var_decls code_statements {$1->insert($1->end(), $2->begin(), $2->end());
+					$$ = createBlock($1);}
+		| code_statements {$$ = createBlock($1);} 
 
-code_statements : code_statements code_statement  
-		| code_statements if_else_block 
-		| code_statements while_block 
-		| if_else_block
-		| while_block
-		| code_statement 		
+code_statements : code_statements code_statement {$$ = $1;
+						$$->push_back($2);}
+		| code_statements if_else_block {$$ = $1;
+						$$->push_back($2);}
+		| code_statements while_block {$$ = $1;
+						$$->push_back($2);}
+		| if_else_block  {$$ = new vector<astNode*> ();
+				$$->push_back($1);} 
+		| while_block	 {$$ = new vector<astNode*> ();
+				$$->push_back($1);}
+		| code_statement {$$ = new vector<astNode*> ();
+				$$->push_back($1);}	
 
-code_statement : assignment | return | kfunc_call 
+code_statement : assignment   {$$ = $1;} 
+		| return      {$$ = $1;}
+		| kfunc_call  {$$ = $1;}
 
-if_else_block : if_statement '{' code_block '}' else_block
-	| if_statement '{' code_block '}' 
-	| if_statement code_block
+if_else_block : if_statement '{' code_block '}' else_block {$$ = createIf($1,$3,$5);}
+	| if_statement '{' code_block '}' 	{$$ = createIf($1,$3);}
+	| if_statement code_block               {$$ = createIf($1,$2);}
 
-else_block : ELSE code_statements | ELSE '{' code_block '}'
+else_block : ELSE code_statements   		{$$ = createBlock($2);}
+		| ELSE '{' code_block '}'       {$$ = $3;}
 
-while_block : while_statement '{' code_block '}' | while_statement code_statements
+while_block : while_statement '{' code_block '}'  {$$ = createWhile($1,$3);}
+		| while_statement code_statements {$$ = createWhile($1,createBlock($2));}
 
-if_statement : IF '(' bool_expression ')'  
+if_statement : IF '(' bool_expression ')'        {$$ = $3;}
 
-while_statement :  WHILE '(' bool_expression ')'
+while_statement :  WHILE '(' bool_expression ')' {$$ = $3;}
 
-arith_expression : add_expr | sub_expr | mul_expr | div_expr
+arith_expression : add_expr {$$ = $1;} 
+		| sub_expr  {$$ = $1;}
+		| mul_expr  {$$ = $1;}
+		| div_expr  {$$ = $1;}
 
-add_expr : term '+' term
-sub_expr : term '-' term
-mul_expr : term '*' term
-div_expr : term '/' term
+add_expr : term '+' term {$$ = createBExpr($1,$3,add);}
+sub_expr : term '-' term {$$ = createBExpr($1,$3,sub);}
+mul_expr : term '*' term {$$ = createBExpr($1,$3,mul);}
+div_expr : term '/' term {$$ = createBExpr($1,$3,divide);}
 
-bool_expression : lt_expr | gt_expr | leq_expr | geq_expr | eq_expr 
+bool_expression : lt_expr  {$$ = $1;}
+	| gt_expr 	   {$$ = $1;}
+	| leq_expr 	   {$$ = $1;}
+	| geq_expr  	   {$$ = $1;}
+	| eq_expr 	   {$$ = $1;}
+	| neq_expr 	   {$$ = $1;}
 
-lt_expr : term '<' term
-gt_expr : term '>' term 
-leq_expr : term LEQ_OPTR term 
-geq_expr : term GEQ_OPTR term
-eq_expr : term EQ_OPTR term
+lt_expr : term '<' term 	{$$ = createRExpr($1,$3,lt);}
+gt_expr : term '>' term 	{$$ = createRExpr($1,$3,gt);}
+leq_expr : term LEQ_OPTR term   {$$ = createRExpr($1,$3,le);}
+geq_expr : term GEQ_OPTR term   {$$ = createRExpr($1,$3,ge);}
+eq_expr : term EQ_OPTR term     {$$ = createRExpr($1,$3,eq);}
+neq_expr : term NOT_OPTR term   {$$ = createRExpr($1,$3,neq);}
 
-term : VAR | NUM
-	| '-' VAR
-	| '-' NUM
+term : VAR 	   {$$ = createVar($1);}
+	| NUM 	   {$$ = createCnst($1);}
+	| '-' VAR  {$$ = createUExpr(createVar($2),uminus);} 
+	| '-' NUM  {$$ = createUExpr(createCnst($2),uminus);}
 
-var_decls : var_decls var_decl
-	| var_decl
+var_decls : var_decls var_decl {$$ = $1;
+				$$->push_back($2);} 
+	| var_decl {$$ = new vector<astNode*> ();
+		   $$->push_back($1);}
 
-var_decl : INT VAR ';' 
+var_decl : INT VAR ';' {$$ = createDecl($2);} 
 
-kfunc_call : READ '(' ')' ';' %prec TWO | PRINT '(' VAR ')' ';' %prec TWO
+kfunc_call : READ '(' ')' ';' %prec TWO {$$ = createCall("read");}
+		| PRINT '(' VAR ')' ';' %prec TWO {$$ = createCall("print",createVar($3));}
 
-assignment : VAR '=' arith_expression ';' | VAR '=' NUM ';' | VAR '=' VAR ';'
-		| VAR '=' kfunc_call 
+assignment : VAR '=' arith_expression ';' {$$ = createAsgn(createVar($1),$3);}
+		| VAR '=' NUM ';'       {$$ = createAsgn(createVar($1),createCnst($3));} 
+		| VAR '=' VAR ';'       {$$ = createAsgn(createVar($1),createVar($3));}
+		| VAR '=' kfunc_call 	{$$ = createAsgn(createVar($1),$3);}
 
-return : RETURN ';' | RETURN '(' arith_expression ')' ';' | RETURN arith_expression ';' | RETURN '(' NUM ')' ';' | RETURN NUM ';'
+// RETURN ';' 			      {$$ = createRet(NULL);}
+return :  RETURN '(' arith_expression ')' ';' {$$ = createRet($3);} 
+	| RETURN arith_expression ';'         {$$ = createRet($2);}
+	| RETURN '(' NUM ')' ';'              {$$ = createRet(createCnst($3));}
+	| RETURN NUM ';'		      {$$ = createRet(createCnst($2));}
 
 %%
 
@@ -121,4 +164,5 @@ int main(int argc, char** argv){
 
 int yyerror(){
 	fprintf(stderr, "Syntax error at line %d!\n",yylineno);
+	return -1;
 }

@@ -1,12 +1,13 @@
 Filename = cmplr
 lex = $(Filename).l
 yacc = $(Filename).y
+INC = ./ast/ast.c
 
 .PHONY : clean test
 
 # Create lex and yacc files and compile together
-$(Filename).out : lex.yy.c y.tab.c
-	gcc -o $(Filename).out lex.yy.c y.tab.c    # creates .out file
+$(Filename).out : lex.yy.c y.tab.c $(INC)
+	g++ -o $(Filename).out lex.yy.c y.tab.c $(INC)    # creates .out file
 
 lex.yy.c : $(lex) y.tab.h
 	lex $(lex)				# creates lex.yy.c
