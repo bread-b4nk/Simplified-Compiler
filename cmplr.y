@@ -1,15 +1,15 @@
 %{
 #include <stdio.h>
 #include "./ast/ast.h"
+#include "./ast/smtic.h"
 extern int yylex();
 extern int yylex_destroy();
 extern int yywrap();
 extern int yylineno;
 extern FILE *yyin;
-int yyerror();
+void yyerror(char* s);
 
-
-astNode* rootNode;
+astNode *root;
 
 %}
 
@@ -27,7 +27,6 @@ astNode* rootNode;
 %token <ival> NUM // operators
 %token LEQ_OPTR GEQ_OPTR EQ_OPTR NOT_OPTR
 		
-// NOTE: try changing astNode to nptr - https://stackoverflow.com/questions/19891748/yystype-has-no-member-named-for-union-type
 %type <nptr> program extern_print extern_read func_block code_block
 %type <nptr> code_statement if_else_block else_block
 %type <nptr> while_block if_statement while_statement arith_expression bool_expression
@@ -38,7 +37,6 @@ astNode* rootNode;
 %type <svec_ptr> var_decls code_statements
 
 %start program
-//%start code_statements
 
 
 %nonassoc THREE
@@ -49,21 +47,42 @@ astNode* rootNode;
 
 %%
 
-program : extern_print extern_read func_block {$$ = createProg($1,$2,$3);}
-	| extern_read extern_print func_block {$$ = createProg($2,$1,$3);}
+program : extern_print extern_read func_block {root = createProg($1,$2,$3);
+						$$ = root;}
+	| extern_read extern_print func_block {root = createProg($2,$1,$3);
+						$$ = root;}
 
 extern_print : EXTERN VOID PRINT '(' INT ')' ';' {$$ = createExtern("print");} 
 extern_read :  EXTERN INT READ '(' ')' ';' 	 {$$ = createExtern("read");}
 
-func_block : INT VAR '(' INT VAR ')' '{' code_block '}' {$$ = createFunc($2,createVar($5),$8);}
+func_block : INT VAR '(' INT VAR ')' '{' code_block '}' {$$ = createFunc($2,createVar($5),$8);
+							free($2);free($5);}
 		| INT VAR '(' ')' '{' code_block '}'    {$$ = createFunc($2,NULL,$6);}
-		| VOID VAR '(' INT VAR ')' '{' code_block '}' {$$ = createFunc($2,createVar($5), $8);}
-		| VOID VAR '(' ')' '{' code_block '}' {$$ = createFunc($2,NULL,$6);}
+		| VOID VAR '(' INT VAR ')' '{' code_block '}' {$$ = createFunc($2,createVar($5), $8);
+							free($2);free($5);}
+		| VOID VAR '(' ')' '{' code_block '}' {$$ = createFunc($2,NULL,$6);
+							free($2);}
 
+
+// HEEERRREE MAKE SURE WE'RE FREEING CORRECTLY
 code_block : var_decls code_statements {$1->insert($1->end(), $2->begin(), $2->end());
 					$$ = createBlock($1);}
+
+/*				
+	//for (std::vector<astNode*>::iterator it = $2->begin(); it != $2->end(); it++) {freeNode(*it);}
+					
+					printf("\n\n=============\n=\n");
+					for (std::vector<astNode*>::iterator it = $2->begin(); it != $2->end(); it++) {printf("%p\n",*it);printNode(*it);}
+					for (std::vector<astNode*>::iterator it = $1->begin(); it != $1->end(); it++) {printf("%p\n",*it);printNode(*it);}
+					printf("\n=\n=============\n\n");
+					}//$2->clear();}
+				
+*/
+
 		| code_statements {$$ = createBlock($1);} 
 
+// April 22nd: if I free $2, I get "Incorrect node type", if I don't free $2, I get leaks
+//             I'm going to focus on bigger issues
 code_statements : code_statements code_statement {$$ = $1;
 						$$->push_back($2);}
 		| code_statements if_else_block {$$ = $1;
@@ -119,31 +138,43 @@ geq_expr : term GEQ_OPTR term   {$$ = createRExpr($1,$3,ge);}
 eq_expr : term EQ_OPTR term     {$$ = createRExpr($1,$3,eq);}
 neq_expr : term NOT_OPTR term   {$$ = createRExpr($1,$3,neq);}
 
-term : VAR 	   {$$ = createVar($1);}
+term : VAR 	   {$$ = createVar($1);
+			free($1);}
 	| NUM 	   {$$ = createCnst($1);}
-	| '-' VAR  {$$ = createUExpr(createVar($2),uminus);} 
+	| '-' VAR  {$$ = createUExpr(createVar($2),uminus);
+			free($2);} 
 	| '-' NUM  {$$ = createUExpr(createCnst($2),uminus);}
 
 var_decls : var_decls var_decl {$$ = $1;
-				$$->push_back($2);} 
+				$$->push_back($2);}
 	| var_decl {$$ = new vector<astNode*> ();
 		   $$->push_back($1);}
 
-var_decl : INT VAR ';' {$$ = createDecl($2);} 
+var_decl : INT VAR ';' {$$ = createDecl($2);
+				free($2);} 
 
 kfunc_call : READ '(' ')' ';' %prec TWO {$$ = createCall("read");}
-		| PRINT '(' VAR ')' ';' %prec TWO {$$ = createCall("print",createVar($3));}
+		| PRINT '(' VAR ')' ';' %prec TWO {$$ = createCall("print",createVar($3));
+							free($3);}
 
-assignment : VAR '=' arith_expression ';' {$$ = createAsgn(createVar($1),$3);}
-		| VAR '=' NUM ';'       {$$ = createAsgn(createVar($1),createCnst($3));} 
-		| VAR '=' VAR ';'       {$$ = createAsgn(createVar($1),createVar($3));}
-		| VAR '=' kfunc_call 	{$$ = createAsgn(createVar($1),$3);}
+assignment : VAR '=' arith_expression ';' {$$ = createAsgn(createVar($1),$3);
+						free($1);}
+		| VAR '=' NUM ';'       {$$ = createAsgn(createVar($1),createCnst($3));
+						free($1);} 
+		| VAR '=' VAR ';'       {$$ = createAsgn(createVar($1),createVar($3));
+						free($1);free($3);}
+		| VAR '=' kfunc_call 	{$$ = createAsgn(createVar($1),$3);
+						free($1);}
 
 // RETURN ';' 			      {$$ = createRet(NULL);}
 return :  RETURN '(' arith_expression ')' ';' {$$ = createRet($3);} 
 	| RETURN arith_expression ';'         {$$ = createRet($2);}
 	| RETURN '(' NUM ')' ';'              {$$ = createRet(createCnst($3));}
 	| RETURN NUM ';'		      {$$ = createRet(createCnst($2));}
+	| RETURN VAR ';'					{$$ = createRet(createVar($2));
+											free($2);}
+	| RETURN '(' VAR ')' ';'			{$$ = createRet(createVar($3));
+											free($3);}
 
 %%
 
@@ -151,18 +182,26 @@ int main(int argc, char** argv){
 	if (argc == 2) {
 		yyin = fopen(argv[1], "r");
 	}
-
+	
+	// call yyparse	
 	yyparse();
+	
+	// printNode(root);
+	// semantic analysis
+	smtic_analyze(root);
 
+	//clean up
 	if (yyin != stdin) {
 		fclose(yyin);
 	}
 
 	yylex_destroy();
+	freeProg(root);
+	
 	return 0;
 } 
 
-int yyerror(){
+void yyerror(char *s){
 	fprintf(stderr, "Syntax error at line %d!\n",yylineno);
-	return -1;
+	exit(1);
 }

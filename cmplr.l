@@ -5,11 +5,9 @@
 	#include <string.h>
 	extern int yylex();
 	extern int yylex_destroy();
-	extern int yywrap();
+//	extern int yywrap();
 	extern int yyerror();
 	extern FILE *yyin;
-
-	int yylineno; // should be handled in yybval later
 
 
 %}

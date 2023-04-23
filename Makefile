@@ -1,13 +1,13 @@
 Filename = cmplr
 lex = $(Filename).l
 yacc = $(Filename).y
-INC = ./ast/ast.c
+INC = ./ast/ast.c ./ast/smtic.c
 
 .PHONY : clean test
 
 # Create lex and yacc files and compile together
 $(Filename).out : lex.yy.c y.tab.c $(INC)
-	g++ -o $(Filename).out lex.yy.c y.tab.c $(INC)    # creates .out file
+	g++ -g -o $(Filename).out lex.yy.c y.tab.c $(INC)    # creates .out file
 
 lex.yy.c : $(lex) y.tab.h
 	lex $(lex)				# creates lex.yy.c
@@ -17,8 +17,6 @@ y.tab.h y.tab.c : $(yacc)
 
 test : $(Filename).out
 	@echo "=== Running tests on files... ===\n"
-	@echo "\n=== sample_mini_c without comments ===\n"
-	./cmplr.out test_code/no_comments_sample.c
 	@echo "\n\n=== p1.c  ===\n"
 	./cmplr.out test_code/p1.c
 	@echo "\n\n=== p2.c ===\n"
@@ -29,6 +27,8 @@ test : $(Filename).out
 	./cmplr.out test_code/p4.c
 	@echo "\n\n=== p5.c ===\n"
 	./cmplr.out test_code/p5.c
+	@echo "\n=== sample_mini_c without comments ===\n"
+	./cmplr.out test_code/no_comments_sample.c
 
 clean :
 	rm -f y.tab.c y.tab.h y.output lex.yy.c $(Filename).out 
