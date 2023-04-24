@@ -26,9 +26,14 @@ int smtic_analyze(astNode* root) {
 
 	// tree traversal
 	checkNode(root,sym_stack);
-
-
+	
+	// cleanup
+	while (sym_stack->size() != 0) {
+		freeTable(sym_stack->back());
+		sym_stack->pop_back();
+	}
 	delete(sym_stack);
+	
 	return 0;
 }
 
@@ -63,8 +68,8 @@ void checkNode(astNode *node, vector<set<char*>*>* sym_stack){
 						checkNode(node->func.body, sym_stack);
 						
 						// spring cleaning
+						freeTable(sym_stack->back());
 						sym_stack->pop_back();
-
 						break;
 					  }
 		case ast_stmt:{ 
@@ -132,10 +137,11 @@ void checkStmt(astStmt *stmt, vector<set<char*>*> *sym_stack){
 						}
 		case ast_block: {
 							
-							// CREATE SYMBOL TABLE
+							// create new and empty symbol table
 							set<char*> *sym_table = new set<char*>();
 							sym_stack->push_back(sym_table);
 							
+							// call checkNode on all statements in block
 							vector<astNode*> slist = *(stmt->block.stmt_list);
 							vector<astNode*>::iterator it = slist.begin();
 							while (it != slist.end()){
@@ -144,6 +150,7 @@ void checkStmt(astStmt *stmt, vector<set<char*>*> *sym_stack){
 							}
 							
 							// POP SYMBOL TABLE
+							freeTable(sym_stack->back());
 							sym_stack->pop_back();
 							break;
 						}
@@ -196,9 +203,24 @@ void checkStmt(astStmt *stmt, vector<set<char*>*> *sym_stack){
 			1			- 	does not
 */
 
+
+void freeTable(set<char*>* sym_table) {
+	assert(sym_table != NULL);
+	
+	set<char*>::iterator it = sym_table->begin();
+	while(it != sym_table->end()) {
+		free(*it);
+		it++;
+	}
+	delete(sym_table);
+ 
+
+}
+
 int findDeclaration(vector<set<char*>*> *sym_stack, char* name) {
 	//printf("Checking declaration of %s\n",name);
-	
+	assert(sym_stack != NULL && name != NULL);	
+
 	vector<set<char*>*>::iterator it = sym_stack->begin();
 	while (it != sym_stack->end()) {
 

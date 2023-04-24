@@ -66,7 +66,8 @@ func_block : INT VAR '(' INT VAR ')' '{' code_block '}' {$$ = createFunc($2,crea
 
 // HEEERRREE MAKE SURE WE'RE FREEING CORRECTLY
 code_block : var_decls code_statements {$1->insert($1->end(), $2->begin(), $2->end());
-					$$ = createBlock($1);}
+					$$ = createBlock($1);
+					delete($2);}
 
 /*				
 	//for (std::vector<astNode*>::iterator it = $2->begin(); it != $2->end(); it++) {freeNode(*it);}
