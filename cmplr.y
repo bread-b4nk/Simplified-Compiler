@@ -7,9 +7,10 @@ extern int yylex_destroy();
 extern int yywrap();
 extern int yylineno;
 extern FILE *yyin;
-void yyerror(char* s);
+extern void yyerror(char* s);
 
-astNode *root;
+astNode* return_root();
+astNode* root;
 
 %}
 
@@ -179,30 +180,12 @@ return :  RETURN '(' arith_expression ')' ';' {$$ = createRet($3);}
 
 %%
 
-int main(int argc, char** argv){
-	if (argc == 2) {
-		yyin = fopen(argv[1], "r");
-	}
-	
-	// call yyparse	
-	yyparse();
-	
-	// printNode(root);
-	// semantic analysis
-	smtic_analyze(root);
-
-	//clean up
-	if (yyin != stdin) {
-		fclose(yyin);
-	}
-
-	yylex_destroy();
-	freeProg(root);
-	
-	return 0;
-} 
+astNode* return_root() {
+	return root; 
+}
 
 void yyerror(char *s){
 	fprintf(stderr, "Syntax error at line %d!\n",yylineno);
 	exit(1);
 }
+

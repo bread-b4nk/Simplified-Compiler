@@ -25,7 +25,9 @@ int smtic_analyze(astNode* root) {
 	
 
 	// tree traversal
-	checkNode(root,sym_stack);
+	if (checkNode(root,sym_stack) != 0) {
+		return 1;
+	}
 	
 	// cleanup
 	while (sym_stack->size() != 0) {
@@ -37,7 +39,7 @@ int smtic_analyze(astNode* root) {
 	return 0;
 }
 
-void checkNode(astNode *node, vector<set<char*>*>* sym_stack){
+int checkNode(astNode *node, vector<set<char*>*>* sym_stack){
 	assert(node != NULL);
 	
 	switch(node->type){
@@ -86,7 +88,7 @@ void checkNode(astNode *node, vector<set<char*>*>* sym_stack){
 						// if we can't find a declaration from earlier, we're not good
 						if (findDeclaration(sym_stack,node->var.name) != 0) {
 								fprintf(stderr,"Unable to find declaration for %s\n",node->var.name);
-								exit(1);
+								return 1;
 						}
 						break;
 
@@ -115,12 +117,13 @@ void checkNode(astNode *node, vector<set<char*>*>* sym_stack){
 					  }
 		default: {
 					fprintf(stderr,"Incorrect node type\n");
-				 	exit(1);
+				 	return 1;
 				 }
 	}
+	return 0;
 }
 
-void checkStmt(astStmt *stmt, vector<set<char*>*> *sym_stack){
+int checkStmt(astStmt *stmt, vector<set<char*>*> *sym_stack){
 	assert(stmt != NULL);
 
 	switch(stmt->type){
@@ -187,9 +190,10 @@ void checkStmt(astStmt *stmt, vector<set<char*>*> *sym_stack){
 						}
 		default: {
 					fprintf(stderr,"Incorrect node type\n");
-				 	exit(1);
+				 	return 1;
 				 }
 	}
+	return 0;
 }
 
 /*  looks through our stack of symbol tables for a declaration of a specific variable name
