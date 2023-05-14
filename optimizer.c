@@ -3,13 +3,20 @@
 #include <stdbool.h>
 #include <cassert>
 
+#include <algorithm>
+#include <set>
+#include <unordered_map>
+
 #include "optimizer.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/IRReader.h>
 #include <llvm-c/Types.h>
+
 #define prt(x) if(x) { printf("%s\n", x); }
 
 int const_fold(LLVMModuleRef module);
+void freeValueRefSet(std::set<LLVMValueRef>* x);
+
 
 LLVMModuleRef createLLVMModel(char * filename){
 	char *err = 0;
@@ -168,7 +175,7 @@ int com_subexp(LLVMModuleRef module) {
 				// store curr instruction's opcode and operands
 				LLVMOpcode opcode = LLVMGetInstructionOpcode(instr);
 				LLVMValueRef operand1 = LLVMGetOperand(instr,0);
-				//printf("\n%s\n",LLVMPrintValueToString(instr));
+			//	printf("\n%s\n",LLVMPrintValueToString(instr));
 					
 				// if it's a load
 				if (opcode == LLVMLoad) {
@@ -180,7 +187,7 @@ int com_subexp(LLVMModuleRef module) {
 							// we cannot optimize this instr further
 							continue;
 							
-						}
+						} // otherwise, if we find a load from the same place
 						else if ((LLVMGetInstructionOpcode(other_instr) == LLVMLoad) && LLVMGetOperand(other_instr,0) == operand1) {
 							LLVMReplaceAllUsesWith(other_instr,instr);
 							changes_made++;
@@ -188,7 +195,7 @@ int com_subexp(LLVMModuleRef module) {
 					}
 				}
 
-				// if it's an arithmetic expression where order doesn't matter
+				// if it's an arithmetic expression where order doesn't matter (+ or *)
 				else if ((LLVMAdd == opcode) ||  (LLVMMul == opcode)) {
 					LLVMValueRef operand2 = LLVMGetOperand(instr,1);
 					for (LLVMValueRef other_instr = LLVMGetNextInstruction(instr); other_instr; other_instr = LLVMGetNextInstruction(other_instr)) {
@@ -202,7 +209,7 @@ int com_subexp(LLVMModuleRef module) {
 					}
 				}
 
-				// if it's an arthmetic expression where order matters
+				// if it's an arthmetic expression where order matters (- or /)
 				else if ((LLVMSub == opcode) || (LLVMUDiv == opcode) || (opcode == LLVMFDiv)) {
 					LLVMValueRef operand2 = LLVMGetOperand(instr,1);
 					for (LLVMValueRef other_instr = LLVMGetNextInstruction(instr); other_instr; other_instr = LLVMGetNextInstruction(other_instr)) {
@@ -282,10 +289,333 @@ int dead_code(LLVMModuleRef module) {
 	return changes_made;
 }
 
-// not due this week
+/*
+
+
+	- uses LLVMConstIntGetSExtValue, LLVMConstInt, LLVMReplaceAllUsesWith, LLVMInnstructionEraseFromParent,LLVMGetSuccessor
+*/
 int const_prop(LLVMModuleRef module) {
 	int changes_made = 0;
-	//printf("constant propogation!\n");
+	printf("constant propogation!\n"); fflush(stdout);
+
+// ========
+// MAKE GEN (and a bit of prep for KILL)
+// ========
+
+	// big GEN unordered map
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
+	
+	// for KILL, the set of all store instructions
+	std::set<LLVMValueRef> *all_stores = new std::set<LLVMValueRef> ();	
+	
+//	printf("DEBUG: GEN Production!\n");
+
+	// for each function (all 1 of them)
+	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
+
+		// for each basic block
+		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
+		
+			std::set<LLVMValueRef> *gen = new std::set<LLVMValueRef> ();
+		
+			// add it to the big GEN
+			//big_gen->insert(std::make_pair(basicBlock,gen));
+			(*big_gen)[basicBlock] = gen;
+		
+			// for each instruction
+			for (LLVMValueRef instr = LLVMGetFirstInstruction(basicBlock); instr; instr = LLVMGetNextInstruction(instr)) {
+
+				// if it's a store instruction
+				LLVMOpcode opcode = LLVMGetInstructionOpcode(instr);
+							
+
+				if (opcode == LLVMStore) {
+//					printf("\tFound a store!\n");
+					// get target memory address
+					LLVMValueRef target = LLVMGetOperand(instr,1);	
+							
+					// check if there's another store to the same location, if there is, delete it
+					std::set<LLVMValueRef>::iterator itr;
+					for (itr = gen->begin(); itr != gen->end(); itr++) {
+						if (target == LLVMGetOperand(*itr,1)) {
+//							printf("\tRemoving store\n");
+							gen->erase (*itr);
+						}
+					}
+
+					// add the current store instruction to gen
+					// and set of all stores
+					gen->insert(instr);
+					all_stores->insert(instr);
+				}				
+			}
+			
+			printf("Final gen:\n");
+			std::set<LLVMValueRef>::iterator itr;
+			for (itr = gen->begin(); itr != gen->end(); itr++) {
+				printf("%s\n",LLVMPrintValueToString(*itr));
+			}
+
+		}
+	}
+
+
+// ========= 
+// make KILL   (except I did step 1 of getting all store instructions earlier)
+// =========	
+
+	// big KILL unordered map
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
+	
+	
+	// for each function (we have only 1 lol)
+	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
+
+		// for each basic block
+		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
+
+			// produce KILL set
+			std::set<LLVMValueRef> *kill = new std::set<LLVMValueRef> ();
+			
+			// add kill set to kill unordered map	
+			(*big_kill)[basicBlock] = kill;
+
+			// for each instruction
+			for (LLVMValueRef instr = LLVMGetFirstInstruction(basicBlock); instr; instr = LLVMGetNextInstruction(instr)) {
+				
+				// if it's a store
+				if (LLVMGetInstructionOpcode(instr) == LLVMStore) {
+					
+					// get the piece of memory that we mess with
+					LLVMValueRef killed_addr = LLVMGetOperand(instr,1);				
+	
+					// now we loop through and look for
+					// EVERY store killed by this instruction
+					std::set<LLVMValueRef>::iterator itr;
+					for (itr = all_stores->begin(); itr != all_stores->end(); itr++) {
+						
+						// if it's not itself, and the same register gets killed
+						if ((*itr != instr) && (LLVMGetOperand(*itr,1) == killed_addr)) {
+							// add to kill set
+							kill->insert(*itr);
+						}
+					}
+				}
+			}
+			printf("Final kill:\n");
+			std::set<LLVMValueRef>::iterator itr;
+			for (itr = kill->begin(); itr != kill->end(); itr++) {
+				printf("%s\n",LLVMPrintValueToString(*itr));
+			}
+		}	
+	}
+
+// ===============
+// make IN and OUT
+// ===============
+	// initialize big IN and big OUT
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_out = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
+	
+	// unordered_map of predecessors
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMBasicBlockRef>*> *pred_map = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMBasicBlockRef>*> ();
+
+
+	
+	// the line below initializes all sets in pred_map to an empty set
+		// (so we can reference them without initializing)
+	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {(*pred_map)[basicBlock] = new std::set<LLVMBasicBlockRef> ();}}
+
+	printf("help\n");
+
+// initialize all IN[B] and all OUT[B]
+	// for all 1 functions
+	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
+		
+		// for each basic block
+		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
+			
+			
+			// set OUT[B] = GEN[B], but we copy the contents						
+			(*big_out)[basicBlock] = (*big_gen)[basicBlock];	// CHECK if this copy contents or not	
+
+			// initialize IN[B] to empty set
+			(*big_in)[basicBlock] = new std::set<LLVMValueRef> ();
+
+
+			// now we get successors to update our mapping of predecessors
+			// looping through our block's successors
+			for (int i = 0; i < LLVMGetNumSuccessors(LLVMGetBasicBlockTerminator(basicBlock)); i++) {
+				
+				// all successors are predecessors of the current block
+				(*pred_map)[LLVMGetSuccessor(LLVMGetBasicBlockTerminator(basicBlock),i)]->insert(basicBlock);
+			}
+		}	
+	}
+	
+	int	changed = 0;
+	printf("found preds\n");
+	while (changed == 0)	{
+		changed = 1;	// set changed to false
+		
+		// for all 1 functions
+		for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
+		
+			// for each basic block
+			for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
+				
+				
+				// got the set of predecessors
+				std::set<LLVMBasicBlockRef> *preds = (*pred_map)[basicBlock];
+			
+				// union the outs of each predecessor
+				std::set<LLVMBasicBlockRef>::iterator itr;
+				for (itr = preds->begin(); itr != preds->end(); itr++) {
+					(*big_in)[basicBlock]->insert((*big_out)[*itr]->begin(),(*big_out)[*itr]->end());
+				}
+			
+				// oldout = OUT[B]
+				std::set<LLVMValueRef> *old_out = (*big_out)[basicBlock];
+
+				// OUT[B] = GEN[B] union (in[B] - kill[B])a
+			
+				// OUT[B] = IN[B] - KILL[B]
+					// done using set_difference
+				std::set_difference((*big_in)[basicBlock]->begin(), (*big_in)[basicBlock]->end(),
+							 (*big_kill)[basicBlock]->begin(), (*big_kill)[basicBlock]->end(),
+							std::inserter(*(*big_out)[basicBlock],(*big_out)[basicBlock]->end()));
+				
+				// then OUT[B] = OUT[B] union GEN[B]
+				std::set<LLVMValueRef>::iterator it;
+				for (it = (*big_gen)[basicBlock]->begin(); it != (*big_gen)[basicBlock]->end(); it++) {
+					(*big_out)[basicBlock]->insert(*it);
+				}
+				
+				if ((*big_out)[basicBlock] != old_out) {
+					changed = 0; //set change to true
+				}
+
+				 // DEBUG
+				printf("In:\n");
+				for (it = (*big_in)[basicBlock]->begin(); it != (*big_in)[basicBlock]->end(); it++) {
+					printf("%s\n",LLVMPrintValueToString(*it));
+				}
+				printf("Out:\n");
+				for (it = (*big_out)[basicBlock]->begin(); it != (*big_out)[basicBlock]->end(); it++) {
+					printf("%s\n",LLVMPrintValueToString(*it));
+				}
+				
+			}
+		}
+	}
+	pred_map->clear();
+// ===================================
+// ACTUAL OPTIMIZATION WITH IN AND OUT
+// ===================================
+
+	// for all 1 functions
+	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
+		
+		// for each basic block
+		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
+			
+
+			// create R, whatever that is
+			std::set<LLVMValueRef> *R;
+			
+			if ((*big_in)[basicBlock]->size() == 0) { R = new std::set<LLVMValueRef> (); }
+			else { R = (*big_in)[basicBlock]; }
+			
+			// Create a to-delete set
+			std::set<LLVMValueRef> *instr_to_die = new std::set<LLVMValueRef> ();
+			
+			// iterator for later	
+			std::set<LLVMValueRef>::iterator itr;
+
+			// for every instruction
+			for (LLVMValueRef instr = LLVMGetFirstInstruction(basicBlock); instr; instr = LLVMGetNextInstruction(instr)) {
+				
+	
+				// if it's a store
+				if (LLVMGetInstructionOpcode(instr) == LLVMStore) {
+						
+					// add it to R
+					R->insert(instr);
+			
+					// remove all store instructions in R that are killed by instruction I
+					LLVMValueRef killed_addr = LLVMGetOperand(instr,1);
+					
+					std::set<LLVMValueRef>::iterator itr;
+					
+					for (itr = R->begin(); itr != R->end(); ) {
+						// if it's not itself, and the same memory gets killed
+						if ((*itr != instr) && (LLVMGetOperand(*itr,1) == killed_addr)) {
+								itr = R->erase(itr);
+						} else ++itr;
+					}
+				}
+				
+				// if it's a load
+				else if (LLVMGetInstructionOpcode(instr) == LLVMLoad) {
+
+				// find all store instructions in R that write to the target address
+					LLVMValueRef target_addr = LLVMGetOperand(instr,0);						
+					
+					// init set of instructions that write to target address
+					std::set<LLVMValueRef> *stores_to_target = new std::set<LLVMValueRef> ();
+						
+					for (itr = R->begin(); itr != R->end(); itr++) {
+						
+						if (LLVMGetOperand(*itr,1) == target_addr) {
+												
+							stores_to_target->insert(*itr);				
+						}
+					}
+					
+				// check if they're all the same constant
+					// flag variable that they're all the constant and the same	
+					int all_same_const = 0;
+
+					// flag variable for whether or not we checked the first
+					// constant yet
+					int checked_one = 1;
+	
+					// variable to store what we hope is a constant	
+					LLVMValueRef hopefully_const;					
+
+
+					for (itr = stores_to_target->begin(); itr != stores_to_target->end(); itr++) {
+						
+						if (checked_one == 1) {
+
+							hopefully_const = LLVMGetOperand(*itr,0);
+							checked_one = 0;
+						}
+						// if it isn't a constant, or they're different constants/values
+						if ((!LLVMIsConstant(LLVMGetOperand(*itr,0))) || (LLVMGetOperand(*itr,0) != hopefully_const)) {
+							all_same_const++;
+						}
+					}
+					// if they are all constants of the same value
+					if (all_same_const == 0)	{
+						
+						// replace all uses
+						long long int_const = LLVMConstIntGetSExtValue(hopefully_const);
+						LLVMReplaceAllUsesWith(instr, LLVMConstInt(LLVMInt32Type(),int_const,0) );
+						changes_made++;
+						instr_to_die->insert(instr);
+					}
+				}
+				// delete marked instructions	
+				if (instr_to_die->size() > 0) {	
+					for (itr = instr_to_die->begin(); itr != instr_to_die->end(); itr++) {
+						LLVMInstructionEraseFromParent(instr);
+					}
+				}
+			}
+		}
+	}	
+	// real clean up hours!!!
 	return changes_made;
 }
 
@@ -305,26 +635,43 @@ int optimize(char* filename) {
 	}
 	
 	int con_fold_changes, com_subexp_changes, dead_code_changes, con_prop_changes;
-	//LLVMPrintModuleToFile(module,"before",NULL);
+	LLVMPrintModuleToFile(module,"before",NULL);
 	int i = 1;
 	do {
-		printf("\n");	
-		// constant folding
+		printf("\n");
+	
+		con_prop_changes = const_prop(module);
+		printf("Iteration %d: %d constant propogation changes\n",i,con_prop_changes);
+	
+		com_subexp_changes = com_subexp(module);
+		printf("Iteration %d: %d common subexpression changes\n",i,com_subexp_changes);
+
 		con_fold_changes = const_fold(module);
 		printf("Iteration %d: %d constant folding changes.\n",i,con_fold_changes);
 		
 		dead_code_changes = dead_code(module);
 		printf("Iteration %d: %d dead code changes\n",i,dead_code_changes);
 
-		com_subexp_changes = com_subexp(module);
-		printf("Iteration %d: %d common subexpression changes\n",i,com_subexp_changes);
-		//LLVMDumpModule(module);
+		//		LLVMDumpModule(module);
 		i++;	
-	} while(con_fold_changes + dead_code_changes + com_subexp_changes != 0);
+	} while(con_prop_changes + con_fold_changes + dead_code_changes + com_subexp_changes != 0);
 	
-	//LLVMPrintModuleToFile(module,"after",NULL);
+	LLVMPrintModuleToFile(module,"after",NULL);
 
 
 	return 0;
+}
+
+
+void freeValueRefSet(std::set<LLVMValueRef>* x) {
+	assert(x != NULL);
+	
+	std::set<LLVMValueRef>::iterator it = x->begin();
+	while(it != x->end()) {
+		printf("%s\n",LLVMPrintValueToString(*it));
+		free(*it);
+		it++;
+	}
+	delete(x);
 }
 

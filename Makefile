@@ -45,7 +45,7 @@ test_sem : $(Filename).out
 	@echo "\n\n=== p4.c ===\n"
 	./cmplr.out semantic_tests/p4.c
 
-test_opt1 : $(Filename).out
+test_opt : $(Filename).out
 	@echo "=== Running Optimization Tests... ===\n"
 	@echo "\n\n=== opt_test1.c ===\n"
 	@echo "Common Subexp"
@@ -60,4 +60,4 @@ test_opt1 : $(Filename).out
 
 clean :
 	rm -f *.o y.tab.c y.tab.h y.output lex.yy.c $(Filename).out
-	rm -f llvm-ir.s before after
+	rm -f llvm-ir.s before after peda* .gdb_history

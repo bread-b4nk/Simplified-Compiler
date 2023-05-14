@@ -41,7 +41,6 @@ int smtic_analyze(astNode* root) {
 
 int checkNode(astNode *node, vector<set<char*>*>* sym_stack){
 	assert(node != NULL);
-	
 	switch(node->type){
 		case ast_prog:{
 						checkNode(node->prog.func,sym_stack);	
