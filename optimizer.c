@@ -16,7 +16,7 @@
 
 int const_fold(LLVMModuleRef module);
 void freeValueRefSet(std::set<LLVMValueRef>* x);
-
+void freeMapToSet(std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *x);
 
 LLVMModuleRef createLLVMModel(char * filename){
 	char *err = 0;
@@ -349,13 +349,13 @@ int const_prop(LLVMModuleRef module) {
 					all_stores->insert(instr);
 				}				
 			}
-			
+/*			
 			printf("Final gen:\n");
 			std::set<LLVMValueRef>::iterator itr;
 			for (itr = gen->begin(); itr != gen->end(); itr++) {
 				printf("%s\n",LLVMPrintValueToString(*itr));
 			}
-
+*/
 		}
 	}
 
@@ -402,11 +402,13 @@ int const_prop(LLVMModuleRef module) {
 					}
 				}
 			}
+/* //DEBUG
 			printf("Final kill:\n");
 			std::set<LLVMValueRef>::iterator itr;
 			for (itr = kill->begin(); itr != kill->end(); itr++) {
 				printf("%s\n",LLVMPrintValueToString(*itr));
 			}
+*/
 		}	
 	}
 
@@ -421,12 +423,10 @@ int const_prop(LLVMModuleRef module) {
 	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMBasicBlockRef>*> *pred_map = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMBasicBlockRef>*> ();
 
 
-	
 	// the line below initializes all sets in pred_map to an empty set
 		// (so we can reference them without initializing)
 	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {(*pred_map)[basicBlock] = new std::set<LLVMBasicBlockRef> ();}}
 
-	printf("help\n");
 
 // initialize all IN[B] and all OUT[B]
 	// for all 1 functions
@@ -454,7 +454,6 @@ int const_prop(LLVMModuleRef module) {
 	}
 	
 	int	changed = 0;
-	printf("found preds\n");
 	while (changed == 0)	{
 		changed = 1;	// set changed to false
 		
@@ -495,7 +494,7 @@ int const_prop(LLVMModuleRef module) {
 					changed = 0; //set change to true
 				}
 
-				 // DEBUG
+/*				 // DEBUG
 				printf("In:\n");
 				for (it = (*big_in)[basicBlock]->begin(); it != (*big_in)[basicBlock]->end(); it++) {
 					printf("%s\n",LLVMPrintValueToString(*it));
@@ -504,11 +503,14 @@ int const_prop(LLVMModuleRef module) {
 				for (it = (*big_out)[basicBlock]->begin(); it != (*big_out)[basicBlock]->end(); it++) {
 					printf("%s\n",LLVMPrintValueToString(*it));
 				}
-				
+*/				
 			}
 		}
 	}
-	pred_map->clear();
+	for (auto& it : *pred_map) {
+  		delete it.second;
+	}
+		delete pred_map;
 // ===================================
 // ACTUAL OPTIMIZATION WITH IN AND OUT
 // ===================================
@@ -605,6 +607,7 @@ int const_prop(LLVMModuleRef module) {
 						changes_made++;
 						instr_to_die->insert(instr);
 					}
+					delete stores_to_target;
 				}
 				// delete marked instructions	
 				if (instr_to_die->size() > 0) {	
@@ -613,14 +616,44 @@ int const_prop(LLVMModuleRef module) {
 					}
 				}
 			}
+		delete instr_to_die;	
+		delete R;
 		}
 	}	
 	// real clean up hours!!!
+	
+	//freeMapToSet(big_gen);
+	//freeMapToSet(big_kill);
+	//freeMapToSet(big_in);
+	//freeMapToSet(big_out);
+	
+	delete big_gen;
+	delete big_kill;
+	delete big_in;
+	delete big_out;
+
 	return changes_made;
 }
 
+void freeMapToSet(std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *x) {
+	for (auto it = x->begin(); it != x->end(); ++it) {
+		std::set<LLVMValueRef> *y = it->second;
+	//	freeValueRefSet(y);
+	}
+	delete x;
+}
 
-
+void freeValueRefSet(std::set<LLVMValueRef>* x) {
+	assert(x != NULL);
+	
+	std::set<LLVMValueRef>::iterator it = x->begin();
+	while(it != x->end()) {
+		printf("%s\n",LLVMPrintValueToString(*it));
+		free(*it);
+		it++;
+	}
+	delete x;
+}
 
 int optimize(char* filename) {
 	assert(filename != NULL);
@@ -658,20 +691,11 @@ int optimize(char* filename) {
 	
 	LLVMPrintModuleToFile(module,"after",NULL);
 
+	LLVMDisposeModule(module);
 
 	return 0;
 }
 
 
-void freeValueRefSet(std::set<LLVMValueRef>* x) {
-	assert(x != NULL);
-	
-	std::set<LLVMValueRef>::iterator it = x->begin();
-	while(it != x->end()) {
-		printf("%s\n",LLVMPrintValueToString(*it));
-		free(*it);
-		it++;
-	}
-	delete(x);
-}
+
 

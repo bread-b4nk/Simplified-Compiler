@@ -45,7 +45,7 @@ int main(int argc, char** argv){
 	// generate llvm ir using clang
 	char cmd[64];
 	sprintf(cmd,"clang -S -emit-llvm %s -o llvm-ir.s\n",argv[1]);
-//	system(cmd);
+	system(cmd);
 
 	printf("generated llvm ir...\n");
 	// check that file exists
@@ -57,7 +57,10 @@ int main(int argc, char** argv){
 	printf("llvm generation successful...\n");	
 
 	// optimize
-	optimize("llvm-ir.s");
+	if (optimize("llvm-ir.s") != 0) {
+		fprintf(stderr,"Optimization failed!\n");
+		exit(-1);
+	}
 	printf("optimization successful...\n");
 	//clean up
 	if (yyin != stdin) {
