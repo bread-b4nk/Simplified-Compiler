@@ -251,7 +251,7 @@ int dead_code(LLVMModuleRef module) {
 		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
 			
 			// for each instruction
-			for (LLVMValueRef instr = LLVMGetFirstInstruction(basicBlock); instr; instr = LLVMGetNextInstruction(instr)) {
+			for (LLVMValueRef instr = LLVMGetFirstInstruction(basicBlock); instr ; instr = LLVMGetNextInstruction(instr)) {
 				// get opcode
 				LLVMOpcode opcode = LLVMGetInstructionOpcode(instr);
 				
@@ -276,6 +276,7 @@ int dead_code(LLVMModuleRef module) {
 						}
 					
 					}
+	
 					// if no references found
 					if (mentioned == 0) {
 						LLVMInstructionEraseFromParent(instr);
@@ -321,7 +322,7 @@ int const_prop(LLVMModuleRef module) {
 			// add it to the big GEN
 			//big_gen->insert(std::make_pair(basicBlock,gen));
 			(*big_gen)[basicBlock] = gen;
-		
+			
 			// for each instruction
 			for (LLVMValueRef instr = LLVMGetFirstInstruction(basicBlock); instr; instr = LLVMGetNextInstruction(instr)) {
 
@@ -411,6 +412,7 @@ int const_prop(LLVMModuleRef module) {
 */
 		}	
 	}
+	delete all_stores;
 
 // ===============
 // make IN and OUT
@@ -436,8 +438,13 @@ int const_prop(LLVMModuleRef module) {
 		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
 			
 			
-			// set OUT[B] = GEN[B], but we copy the contents						
-			(*big_out)[basicBlock] = (*big_gen)[basicBlock];	// CHECK if this copy contents or not	
+			// set OUT[B] = GEN[B], but we copy the address (same pointer)							
+			//std::set<LLVMValueRef> *out((*big_gen)[basicBlock]);	
+			//(*big_out)[basicBlock] = out;	
+
+			// equivalent to 
+			(*big_out)[basicBlock] = (*big_gen)[basicBlock];
+
 
 			// initialize IN[B] to empty set
 			(*big_in)[basicBlock] = new std::set<LLVMValueRef> ();
@@ -507,6 +514,8 @@ int const_prop(LLVMModuleRef module) {
 			}
 		}
 	}
+
+	// clean pred_map properly
 	for (auto& it : *pred_map) {
   		delete it.second;
 	}
@@ -622,14 +631,14 @@ int const_prop(LLVMModuleRef module) {
 	}	
 	// real clean up hours!!!
 	
-	//freeMapToSet(big_gen);
-	//freeMapToSet(big_kill);
-	//freeMapToSet(big_in);
-	//freeMapToSet(big_out);
+//	freeMapToSet(big_gen);
+//	freeMapToSet(big_kill);
+	freeMapToSet(big_in);
+//	freeMapToSet(big_out);
 	
 	delete big_gen;
 	delete big_kill;
-	delete big_in;
+//	delete big_in;
 	delete big_out;
 
 	return changes_made;
@@ -638,7 +647,7 @@ int const_prop(LLVMModuleRef module) {
 void freeMapToSet(std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *x) {
 	for (auto it = x->begin(); it != x->end(); ++it) {
 		std::set<LLVMValueRef> *y = it->second;
-	//	freeValueRefSet(y);
+		freeValueRefSet(y);
 	}
 	delete x;
 }
