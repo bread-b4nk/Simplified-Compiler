@@ -6,6 +6,7 @@
 #include "./ast/ast.h"
 #include "./ast/smtic.h"
 #include "optimizer.h"
+#include "code_gen.h"
 #define prt(x) if(x) { printf("%s\n", x); }
 
 extern int yylex();
@@ -72,4 +73,5 @@ int main(int argc, char** argv){
 	
 	return 0;
 } 
+
 

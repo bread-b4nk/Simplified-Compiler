@@ -1,6 +1,8 @@
 # Simplified Compiler!
 
-# Chavin (Kris) Udomwongsa 
+## Chavin (Kris) Udomwongsa 
+
+
 
 We have a `make clean` and a `make test` to run the compiler on the test files
 
@@ -13,6 +15,7 @@ The compiler is broken up into the following stages
 3. llvm IR generation 
 4. optimization
 
+I will go into detail on how these sections work, which files belong to each section, and how they work together.
 
 ## Lexical Analysis
 
@@ -26,8 +29,7 @@ This occurs in `cmplr.c` and not in its own optimization function, primarily bec
 
 
 
-
-Below are notes that I've made, I haven't put in much effort into making it very readable.
+For class we used a dumbed-down (simplified) version of C, mini-c.
 
 Rules (of mini-c):
 - no comments

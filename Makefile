@@ -2,7 +2,8 @@ Filename = cmplr
 lex = $(Filename).l
 yacc = $(Filename).y
 opt = optimizer
-INC = ./ast/ast.c ./ast/smtic.c ./$(opt).c 
+cg = code_gen
+INC = ./ast/ast.c ./ast/smtic.c ./$(opt).c ./$(cg).c
 
 .PHONY : clean test test_sem test_opt1
 
@@ -11,6 +12,9 @@ $(Filename).out : $(Filename).c lex.yy.c y.tab.c $(INC) # ./$(opt).o
 
 $(opt).o : $(opt).c
 	clang -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c $(opt).c
+
+$(cg).o : $(cg).c
+	clang -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c $(cg).c
 
 	
 lex.yy.c : $(lex) y.tab.h
