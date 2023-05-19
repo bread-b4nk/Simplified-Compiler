@@ -18,6 +18,13 @@ int const_fold(LLVMModuleRef module);
 void freeValueRefSet(std::set<LLVMValueRef>* x);
 void freeMapToSet(std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *x);
 
+void make_gen(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen, std::set<LLVMValueRef> *all_stores);
+void make_kill(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill, std::set<LLVMValueRef> *all_stores);
+void make_in_out(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_out, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill);
+int actually_optimize(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in);
+
+
+
 LLVMModuleRef createLLVMModel(char * filename){
 	char *err = 0;
 
@@ -290,28 +297,21 @@ int dead_code(LLVMModuleRef module) {
 	return changes_made;
 }
 
-/*
+
+/*			helper function for constant propogation
+	Makes a GEN set for each basic block and creates an unordered_map to access each one.
+			
+
+	Inputs
+		module - LLVMModuleRef to access LLVM-IR code
+		big_gen - mapping from basic blocks to sets of LLVMValueRefs, which is each GEN set
+		all_stores - set of all stores to generate KILL later
 
 
-	- uses LLVMConstIntGetSExtValue, LLVMConstInt, LLVMReplaceAllUsesWith, LLVMInnstructionEraseFromParent,LLVMGetSuccessor
 */
-int const_prop(LLVMModuleRef module) {
-	int changes_made = 0;
-	printf("constant propogation!\n"); fflush(stdout);
+void make_gen(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen, std::set<LLVMValueRef> *all_stores) {
 
-// ========
-// MAKE GEN (and a bit of prep for KILL)
-// ========
-
-	// big GEN unordered map
-	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
-	
-	// for KILL, the set of all store instructions
-	std::set<LLVMValueRef> *all_stores = new std::set<LLVMValueRef> ();	
-	
-//	printf("DEBUG: GEN Production!\n");
-
-	// for each function (all 1 of them)
+		// for each function (all 1 of them)
 	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
 
 		// for each basic block
@@ -359,17 +359,15 @@ int const_prop(LLVMModuleRef module) {
 */
 		}
 	}
+}
 
+/*	        helper function for constant propogation
+	Makes the KILL set for each basic block
 
-// ========= 
-// make KILL   (except I did step 1 of getting all store instructions earlier)
-// =========	
+*/
+void make_kill(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill, std::set<LLVMValueRef> *all_stores) {
 
-	// big KILL unordered map
-	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
-	
-	
-	// for each function (we have only 1 lol)
+		// for each function (we have only 1 lol)
 	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
 
 		// for each basic block
@@ -412,15 +410,16 @@ int const_prop(LLVMModuleRef module) {
 */
 		}	
 	}
-	delete all_stores;
 
-// ===============
-// make IN and OUT
-// ===============
-	// initialize big IN and big OUT
-	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
-	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_out = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
-	
+}
+
+/*	        helper function for constant propogation
+	Uses GEN and KILl to create IN and OUT for each
+	basic block
+
+*/
+void make_in_out(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_out, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill) {
+
 	// unordered_map of predecessors
 	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMBasicBlockRef>*> *pred_map = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMBasicBlockRef>*> ();
 
@@ -438,12 +437,12 @@ int const_prop(LLVMModuleRef module) {
 		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
 			
 			
-			// set OUT[B] = GEN[B], but we copy the address (same pointer)							
-			//std::set<LLVMValueRef> *out((*big_gen)[basicBlock]);	
-			//(*big_out)[basicBlock] = out;	
 
-			// equivalent to 
-			(*big_out)[basicBlock] = (*big_gen)[basicBlock];
+			// set OUT[B] = GEN[B], copying data
+			std::set<LLVMValueRef> *gen = ((*big_gen)[basicBlock]);
+			std::set<LLVMValueRef> *out = new std::set<LLVMValueRef>(*gen);
+			(*big_out)[basicBlock] = out;
+		
 
 
 			// initialize IN[B] to empty set
@@ -519,12 +518,20 @@ int const_prop(LLVMModuleRef module) {
 	for (auto& it : *pred_map) {
   		delete it.second;
 	}
-		delete pred_map;
-// ===================================
-// ACTUAL OPTIMIZATION WITH IN AND OUT
-// ===================================
+	delete pred_map;
 
-	// for all 1 functions
+}
+
+/*	        helper function for constant propogation
+	Uses each IN set to optimize the code
+	we return the number of changes made
+
+*/
+int actually_optimize(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in) {
+
+	int changes_made = 0;
+
+// for all 1 functions
 	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
 		
 		// for each basic block
@@ -629,16 +636,78 @@ int const_prop(LLVMModuleRef module) {
 		delete R;
 		}
 	}	
-	// real clean up hours!!!
+	return changes_made;
+}
+
+
+
+// CONSTANT PROPOGATION
+int const_prop(LLVMModuleRef module) {
+	int changes_made = 0;
+	printf("constant propogation!\n"); fflush(stdout);
+
+// ========
+// MAKE GEN (and a bit of prep for KILL)
+// ========
+
+	// big GEN unordered map
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
 	
-//	freeMapToSet(big_gen);
-//	freeMapToSet(big_kill);
-	freeMapToSet(big_in);
-//	freeMapToSet(big_out);
+	// for KILL, the set of all store instructions
+	std::set<LLVMValueRef> *all_stores = new std::set<LLVMValueRef> ();	
+
+	make_gen(module,big_gen,all_stores);
+	
+
+// ========= 
+// make KILL   (except I did step 1 of getting all store instructions earlier)
+// =========	
+
+	// big KILL unordered map
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
+
+	make_kill(module,big_kill,all_stores);	
+	
+	delete all_stores;
+
+// ===============
+// make IN and OUT
+// ===============
+	// initialize big IN and big OUT
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
+	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_out = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
+
+
+	make_in_out(module, big_in, big_out, big_gen, big_kill);
+
+// ===================================
+// ACTUAL OPTIMIZATION WITH IN AND OUT
+// ===================================
+
+	changes_made = changes_made + actually_optimize(module,big_in);	
+	
+
+// real clean up hours!!!
+	
+	for (auto& it : *big_gen) {
+		delete it.second;
+     }	
+	for (auto& it : *big_kill) {
+		delete it.second;
+     }	
+	for (auto& it : *big_in) {
+		delete it.second;
+
+     }	
+	for (auto& it : *big_out) {
+		delete it.second;
+     }	
+	
+
 	
 	delete big_gen;
 	delete big_kill;
-//	delete big_in;
+	delete big_in;
 	delete big_out;
 
 	return changes_made;
