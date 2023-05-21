@@ -5,4 +5,4 @@
 #include <llvm-c/IRReader.h>
 #include <llvm-c/Types.h>
 
-int code_gen(LLVMModuleRef module);
+int code_gen(char* filename);

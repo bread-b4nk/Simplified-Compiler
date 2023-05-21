@@ -15,9 +15,8 @@
 #define prt(x) if(x) { printf("%s\n", x); }
 
 int const_fold(LLVMModuleRef module);
-void freeValueRefSet(std::set<LLVMValueRef>* x);
-void freeMapToSet(std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *x);
 
+// helper functions for constant propogation
 void make_gen(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen, std::set<LLVMValueRef> *all_stores);
 void make_kill(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill, std::set<LLVMValueRef> *all_stores);
 void make_in_out(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_out, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_gen, std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_kill);
@@ -46,51 +45,6 @@ LLVMModuleRef createLLVMModel(char * filename){
 
 	return m;
 }
-
-void walkBBInstructions(LLVMBasicBlockRef bb){
-	for (LLVMValueRef instruction = LLVMGetFirstInstruction(bb); instruction;
-  				instruction = LLVMGetNextInstruction(instruction)) {
-	
-		//LLVMGetInstructionOpcode gives you LLVMOpcode that is a enum		
-		LLVMOpcode op = LLVMGetInstructionOpcode(instruction);
-        
-		
-		//if (op == LLVMCall) //Type of instruction can be checked by checking op
-		//if (LLVMIsACallInst(instruction)) //Type of instruction can be checked by using macro defined IsA functions
-		//{
-		
-
-	}
-
-}
-
-void walkFunctions(LLVMModuleRef module){
-	for (LLVMValueRef function =  LLVMGetFirstFunction(module); 
-			function; 
-			function = LLVMGetNextFunction(function)) {
-
-		const char* funcName = LLVMGetValueName(function);	
-
-		printf("\nFunction Name: %s\n", funcName);
-
-		//walkBasicblocks(function);
- 	}
-}
-
-
-
-void walkBasicblocks(LLVMValueRef function){
-	for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function);
- 			 basicBlock;
-  			 basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
-		
-		//printf("\nIn basic block\n");
-		walkBBInstructions(basicBlock);
-	
-	}
-}
-
-
 
 /* constant folding
 		goes over all instructions and finds instructions
@@ -533,33 +487,33 @@ int actually_optimize(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef
 
 // for all 1 functions
 	for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function)) {
-		
+		// iterator for later	
+		std::set<LLVMValueRef>::iterator itr;
+
 		// for each basic block
 		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function); basicBlock; basicBlock = LLVMGetNextBasicBlock(basicBlock)) {
 			
 
-			// create R, whatever that is
+			// create R
 			std::set<LLVMValueRef> *R;
 			
-			if ((*big_in)[basicBlock]->size() == 0) { R = new std::set<LLVMValueRef> (); }
-			else { R = (*big_in)[basicBlock]; }
+			int had_to_create_new_R = 1;
+
+			if ((*big_in)[basicBlock]->size() == 0) { had_to_create_new_R = 0; R = new std::set<LLVMValueRef> (); }
+			else { R = (*big_in)[basicBlock]; } //CLONE R
 			
 			// Create a to-delete set
 			std::set<LLVMValueRef> *instr_to_die = new std::set<LLVMValueRef> ();
 			
-			// iterator for later	
-			std::set<LLVMValueRef>::iterator itr;
-
-			// for every instruction
+			
+			// for every instruction I (instr = I)
 			for (LLVMValueRef instr = LLVMGetFirstInstruction(basicBlock); instr; instr = LLVMGetNextInstruction(instr)) {
 				
 	
 				// if it's a store
 				if (LLVMGetInstructionOpcode(instr) == LLVMStore) {
 						
-					// add it to R
-					R->insert(instr);
-			
+								
 					// remove all store instructions in R that are killed by instruction I
 					LLVMValueRef killed_addr = LLVMGetOperand(instr,1);
 					
@@ -571,69 +525,74 @@ int actually_optimize(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef
 								itr = R->erase(itr);
 						} else ++itr;
 					}
+					
+					// add it to R
+					R->insert(instr);
 				}
 				
+				
+
 				// if it's a load
 				else if (LLVMGetInstructionOpcode(instr) == LLVMLoad) {
 
-				// find all store instructions in R that write to the target address
-					LLVMValueRef target_addr = LLVMGetOperand(instr,0);						
+
 					
+					// if R is empty, move onto next instruction I
+					if (R->size() == 0) { continue;  }			
+	
 					// init set of instructions that write to target address
 					std::set<LLVMValueRef> *stores_to_target = new std::set<LLVMValueRef> ();
-						
+	
+					// find all store instructions in R that write to the target address %t
+					LLVMValueRef target_addr = LLVMGetOperand(instr,0);										
+					LLVMValueRef value_stored = NULL;
+
+									
+					// go through R, if it writes to the same address at %t
+					// add it to a set
 					for (itr = R->begin(); itr != R->end(); itr++) {
 						
+						// we want store instructions in R that:
+						//     write to the same address
+						//     writes constants
 						if (LLVMGetOperand(*itr,1) == target_addr) {
-												
-							stores_to_target->insert(*itr);				
-						}
+							stores_to_target->insert(*itr);	
+							value_stored = LLVMGetOperand(*itr,0);			
+						} 
 					}
-					
-				// check if they're all the same constant
-					// flag variable that they're all the constant and the same	
-					int all_same_const = 0;
-
-					// flag variable for whether or not we checked the first
-					// constant yet
-					int checked_one = 1;
-	
-					// variable to store what we hope is a constant	
-					LLVMValueRef hopefully_const;					
+		
+					// if we stored a NULl somehow?			
+					if (value_stored == NULL) {continue;}
+		
+					// if it wasn't a constant
+					if (!LLVMIsConstant(value_stored)) { continue;}
 
 
+					// now we check if all values are the SAME constant
 					for (itr = stores_to_target->begin(); itr != stores_to_target->end(); itr++) {
-						
-						if (checked_one == 1) {
-
-							hopefully_const = LLVMGetOperand(*itr,0);
-							checked_one = 0;
-						}
-						// if it isn't a constant, or they're different constants/values
-						if ((!LLVMIsConstant(LLVMGetOperand(*itr,0))) || (LLVMGetOperand(*itr,0) != hopefully_const)) {
-							all_same_const++;
-						}
+						if (LLVMGetOperand(*itr,0) != value_stored) 
+							continue;
 					}
-					// if they are all constants of the same value
-					if (all_same_const == 0)	{
-						
-						// replace all uses
-						long long int_const = LLVMConstIntGetSExtValue(hopefully_const);
-						LLVMReplaceAllUsesWith(instr, LLVMConstInt(LLVMInt32Type(),int_const,0) );
-						changes_made++;
-						instr_to_die->insert(instr);
-					}
+			
+					// replace all uses
+					long long int_const = LLVMConstIntGetSExtValue(value_stored);
+					LLVMReplaceAllUsesWith(instr, LLVMConstInt(LLVMInt32Type(),int_const,0) );
+					changes_made++;
+					instr_to_die->insert(instr);
 					delete stores_to_target;
-				}
-				// delete marked instructions	
-				if (instr_to_die->size() > 0) {	
-					for (itr = instr_to_die->begin(); itr != instr_to_die->end(); itr++) {
-						LLVMInstructionEraseFromParent(instr);
-					}
+				
 				}
 			}
-		delete instr_to_die;	
-		delete R;
+
+			// delete marked instructions	
+
+			if (instr_to_die->size() > 0) {	
+				for (itr = instr_to_die->begin(); itr != instr_to_die->end(); itr++) {
+					LLVMInstructionEraseFromParent(*itr);
+				}
+			}
+			if (had_to_create_new_R == 0) {delete R;}
+			delete instr_to_die;	
 		}
 	}	
 	return changes_made;
@@ -644,7 +603,7 @@ int actually_optimize(LLVMModuleRef module, std::unordered_map<LLVMBasicBlockRef
 // CONSTANT PROPOGATION
 int const_prop(LLVMModuleRef module) {
 	int changes_made = 0;
-	printf("constant propogation!\n"); fflush(stdout);
+//	printf("constant propogation!\n"); fflush(stdout);
 
 // ========
 // MAKE GEN (and a bit of prep for KILL)
@@ -673,6 +632,8 @@ int const_prop(LLVMModuleRef module) {
 // ===============
 // make IN and OUT
 // ===============
+
+
 	// initialize big IN and big OUT
 	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_in = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
 	std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *big_out = new std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> ();
@@ -703,7 +664,6 @@ int const_prop(LLVMModuleRef module) {
 		delete it.second;
      }	
 	
-
 	
 	delete big_gen;
 	delete big_kill;
@@ -713,26 +673,18 @@ int const_prop(LLVMModuleRef module) {
 	return changes_made;
 }
 
-void freeMapToSet(std::unordered_map<LLVMBasicBlockRef, std::set<LLVMValueRef>*> *x) {
-	for (auto it = x->begin(); it != x->end(); ++it) {
-		std::set<LLVMValueRef> *y = it->second;
-		freeValueRefSet(y);
-	}
-	delete x;
-}
 
-void freeValueRefSet(std::set<LLVMValueRef>* x) {
-	assert(x != NULL);
-	
-	std::set<LLVMValueRef>::iterator it = x->begin();
-	while(it != x->end()) {
-		printf("%s\n",LLVMPrintValueToString(*it));
-		free(*it);
-		it++;
-	}
-	delete x;
-}
+/*
 
+		Main Optimization Function
+		(the one called in cmplr.c)
+
+		
+	Runs all the different optimization methods
+	and keeps looping through them until no 
+	more changes are being made.
+
+*/
 int optimize(char* filename) {
 	assert(filename != NULL);
 
@@ -746,28 +698,32 @@ int optimize(char* filename) {
 	}
 	
 	int con_fold_changes, com_subexp_changes, dead_code_changes, con_prop_changes;
-	LLVMPrintModuleToFile(module,"before",NULL);
+	
 	int i = 1;
 	do {
 		printf("\n");
 	
 		con_prop_changes = const_prop(module);
-		printf("Iteration %d: %d constant propogation changes\n",i,con_prop_changes);
+		printf("\tIteration %d: %d constant propogation changes\n",i,con_prop_changes);
 	
 		com_subexp_changes = com_subexp(module);
-		printf("Iteration %d: %d common subexpression changes\n",i,com_subexp_changes);
+		printf("\tIteration %d: %d common subexpression changes\n",i,com_subexp_changes);
 
 		con_fold_changes = const_fold(module);
-		printf("Iteration %d: %d constant folding changes.\n",i,con_fold_changes);
+		printf("\tIteration %d: %d constant folding changes.\n",i,con_fold_changes);
 		
 		dead_code_changes = dead_code(module);
-		printf("Iteration %d: %d dead code changes\n",i,dead_code_changes);
+		printf("\tIteration %d: %d dead code changes\n",i,dead_code_changes);
 
 		//		LLVMDumpModule(module);
 		i++;	
+
 	} while(con_prop_changes + con_fold_changes + dead_code_changes + com_subexp_changes != 0);
 	
-	LLVMPrintModuleToFile(module,"after",NULL);
+	char output_file[64];
+	sprintf(output_file,"%s-faster",filename);
+
+	LLVMPrintModuleToFile(module,output_file,NULL);
 
 	LLVMDisposeModule(module);
 

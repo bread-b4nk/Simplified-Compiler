@@ -20,6 +20,7 @@ extern astNode* return_root();
 void yyerror(char* s);
 
 extern int optimize(char* filename);
+extern int code_gen(char* filename);
 
 int main(int argc, char** argv){
 	if (argc == 2) {
@@ -42,13 +43,14 @@ int main(int argc, char** argv){
 		exit(-1);
 	}
 	printf("semantic analysis successful...\n");
-	
+		
 	// generate llvm ir using clang
 	char cmd[64];
 	sprintf(cmd,"clang -S -emit-llvm %s -o llvm-ir.s\n",argv[1]);
 	system(cmd);
 
 	printf("generated llvm ir...\n");
+
 	// check that file exists
 	if (access("llvm-ir.s",0) != 0) {
 		fprintf(stderr, "Generating llvm-ir failed!\n");
@@ -62,7 +64,17 @@ int main(int argc, char** argv){
 		fprintf(stderr,"Optimization failed!\n");
 		exit(-1);
 	}
+
+	if  (access("llvm-ir.s-faster",0) != 0)	{
+		fprintf(stderr,"Optimization failed!\n");
+		exit(-1);
+	}
+
 	printf("optimization successful...\n");
+
+	code_gen("llvm-ir.s-faster");
+	
+
 	//clean up
 	if (yyin != stdin) {
 		fclose(yyin);

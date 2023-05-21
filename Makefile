@@ -64,4 +64,4 @@ test_opt : $(Filename).out
 
 clean :
 	rm -f *.o y.tab.c y.tab.h y.output lex.yy.c $(Filename).out
-	rm -f llvm-ir.s before after peda* .gdb_history
+	rm -f before llvm-ir.s llvm-ir.s-faster peda* .gdb_history
