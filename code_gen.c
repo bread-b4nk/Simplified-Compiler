@@ -160,7 +160,7 @@ void expire_old_intervals(int index, std::unordered_map<LLVMValueRef,int[2]> *li
 
 			// if we are at or past the interval, free the register
 			if ((*live_range)[itr->second][1] <= index) {
-						
+	
 // NOTE: IF YOU CAN EXPIRE AND USE THE SAME REGISTER ON A GIVEN LINE
 // AND YOU NEED TO CHECK CONDITIONS (like if it's the first operand
 // in the add or smt), THE CHECK WILL BE HERE. USE instr and active_itr.
