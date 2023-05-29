@@ -704,16 +704,16 @@ int optimize(char* filename) {
 		printf("\n");
 	
 		con_prop_changes = const_prop(module);
-		printf("\tIteration %d: %d constant propogation changes\n",i,con_prop_changes);
+//		printf("\tIteration %d: %d constant propogation changes\n",i,con_prop_changes);
 	
 		com_subexp_changes = com_subexp(module);
-		printf("\tIteration %d: %d common subexpression changes\n",i,com_subexp_changes);
+//		printf("\tIteration %d: %d common subexpression changes\n",i,com_subexp_changes);
 
 		con_fold_changes = const_fold(module);
-		printf("\tIteration %d: %d constant folding changes.\n",i,con_fold_changes);
+//		printf("\tIteration %d: %d constant folding changes.\n",i,con_fold_changes);
 		
 		dead_code_changes = dead_code(module);
-		printf("\tIteration %d: %d dead code changes\n",i,dead_code_changes);
+//		printf("\tIteration %d: %d dead code changes\n",i,dead_code_changes);
 
 		//		LLVMDumpModule(module);
 		i++;	

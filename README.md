@@ -2,11 +2,13 @@
 
 ## Chavin (Kris) Udomwongsa 
 
+**For grading: please use `make final`** as it'll run through all the fianl test files provided.
 
 
-We have a `make clean` and a `make test` to run the compiler on the test files
+In terms of testing we have `make first_test`, `make test_sem` and `make test_opt`, and `make final`
 
-In terms of testing we have `make test`, `make test_sem` and `make test_opt1`
+
+**The rest of this readme is not done, I want to do a nice writeup of everything for my future self**.
 
 The compiler is broken up into the following stages
 

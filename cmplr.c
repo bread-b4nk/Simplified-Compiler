@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -23,7 +24,7 @@ extern int optimize(char* filename);
 extern int code_gen(char* filename);
 
 int main(int argc, char** argv){
-	if (argc == 2) {
+	if (argc >=  2) {
 		yyin = fopen(argv[1], "r");
 	}	
 
@@ -32,7 +33,7 @@ int main(int argc, char** argv){
 		fprintf(stderr,"yyparse failed!\n");
 	}
 	
-	printf("== Simplified Compiler ==\n");
+//	printf("== Simplified Compiler ==\n");
 
 	astNode *root = return_root();
 	
@@ -42,14 +43,29 @@ int main(int argc, char** argv){
 		fprintf(stderr,"Semantic analysis failed!\n");
 		exit(-1);
 	}
-	printf("semantic analysis successful...\n");
+//	printf("semantic analysis successful...\n");
 		
 	// generate llvm ir using clang
-	char cmd[64];
-	sprintf(cmd,"clang -S -emit-llvm %s -o llvm-ir.s\n",argv[1]);
-	system(cmd);
+	char cmd[128];
+	char* lastSlash = strrchr(argv[1],'/');
+	char path[32];
 
-	printf("generated llvm ir...\n");
+	// if we're only given a C file, then we'll generate the llvm ourself
+	// however, we won't be able to use external functions (print and read)
+	if (argc == 2) {
+
+		sprintf(cmd,"clang -S -emit-llvm %s -o llvm-ir.s\n",argv[1]);
+		system(cmd);
+
+	}
+
+	else { // otherwise, we've been given an ll file as our second argument
+		
+		sprintf(cmd,"cp %s llvm-ir.s\n",argv[2]);
+		system(cmd);
+	}	
+	
+//	printf("generated llvm ir...\n");
 
 	// check that file exists
 	if (access("llvm-ir.s",0) != 0) {
@@ -57,7 +73,7 @@ int main(int argc, char** argv){
 		exit(-1);
 	}
 	
-	printf("llvm generation successful...\n");	
+//	printf("llvm generation successful...\n");	
 
 	// optimize
 	if (optimize("llvm-ir.s") != 0) {
@@ -70,9 +86,13 @@ int main(int argc, char** argv){
 		exit(-1);
 	}
 
-	printf("optimization successful...\n");
+//	printf("optimization successful...\n");
 
-	code_gen("llvm-ir.s-faster");
+	if (code_gen("llvm-ir.s-faster") != 0) {
+
+		fprintf(stderr,"Code generation failed!\n");
+		exit(-1);
+	}
 	
 
 	//clean up
