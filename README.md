@@ -1,7 +1,5 @@
 # Simplified Compiler!
 
-## Chavin (Kris) Udomwongsa 
-
 **For grading: please use `make final`** as it'll run through all the fianl test files provided.
 
 
